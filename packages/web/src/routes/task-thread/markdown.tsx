@@ -1,4 +1,4 @@
-import { memo, useState, type ComponentProps } from 'react'
+import { memo, useContext, useState, type ComponentProps } from 'react'
 import {
   Streamdown,
   defaultRemarkPlugins,
@@ -9,6 +9,7 @@ import {
   type UrlTransform,
 } from 'streamdown'
 
+import { ThemeContext } from '@/components/theme-provider'
 import { SYN_THEME, highlight, highlightSync, supportedLanguages } from '@/lib/highlighter'
 
 import { LinkSafetyDialog } from './link-safety-dialog'
@@ -56,6 +57,11 @@ const mermaidPlugin: DiagramPlugin = {
     },
   }),
 }
+
+const MERMAID_OPTIONS = {
+  dark: { config: { theme: 'dark' } },
+  light: { config: { theme: 'default' } },
+} as const
 
 interface MdastNode {
   type: string
@@ -265,6 +271,8 @@ export const Markdown = memo(function Markdown({
   variant?: 'chat' | 'document'
   urlTransform?: UrlTransform
 }) {
+  const theme = useContext(ThemeContext)?.resolvedTheme ?? 'dark'
+
   return (
     <Streamdown
       className={
@@ -275,6 +283,7 @@ export const Markdown = memo(function Markdown({
             : 'thread-markdown'
       }
       plugins={{ code: shikiPlugin, ...(inline ? {} : { mermaid: mermaidPlugin }) }}
+      mermaid={MERMAID_OPTIONS[theme]}
       shikiTheme={[SYN_THEME, SYN_THEME]}
       remarkPlugins={breaks ? HARD_BREAKS : undefined}
       rehypePlugins={urlTransform ? undefined : TRANSCRIPT_REHYPE_PLUGINS}

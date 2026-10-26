@@ -647,9 +647,8 @@
   font-size: 13px;
 }
 
-/* Mermaid's default palette needs a light canvas in either cockpit theme. */
 .thread-markdown [data-streamdown='mermaid'] {
-  background: var(--color-white);
+  background: var(--background);
   border-radius: var(--radius-md);
 }
 

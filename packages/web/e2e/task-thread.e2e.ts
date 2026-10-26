@@ -629,18 +629,21 @@ describe('Mermaid conversation previews', () => {
     browser.setViewport(1440, 1000)
     browser.goto(`${baseUrl}${scoped(`/tasks/${MERMAID_RUN.id}`)}`)
     browser.waitForFunction(`document.querySelectorAll('[data-streamdown="mermaid-block"]').length === 4`)
-    const revealDiagram = (index: number) => browser.evaluate(`
-      document.querySelector('[data-slot="main"]').dispatchEvent(new WheelEvent('wheel', { deltaY: -120, bubbles: true }));
-      document.querySelectorAll('[data-streamdown="mermaid-block"]')[${index}].scrollIntoView({ block: 'center' });
-    `)
-    // Unpin the live tail before revealing each lazily rendered diagram.
-    for (let index = 0; index < 4; index++) {
-      revealDiagram(index)
-      browser.waitForFunction(`(() => {
-        const block = document.querySelectorAll('[data-streamdown="mermaid-block"]')[${index}]
-        return ${index === 3 ? "block.textContent.includes('Mermaid Error:')" : "block.querySelector('[role=img] svg') !== null"}
-      })()`)
-    }
+    // Keep it in view while lazy SVG layout changes the thread's height.
+    const revealDiagram = (index: number) => browser.waitForFunction(`(() => {
+      const block = document.querySelectorAll('[data-streamdown="mermaid-block"]')[${index}]
+      const main = block.closest('[data-slot="transcript-viewport"], [data-slot="main"]')
+      const box = block.getBoundingClientRect(), viewport = main.getBoundingClientRect()
+      const target = Math.max(0, Math.min(main.scrollHeight - main.clientHeight,
+        main.scrollTop + box.top - viewport.top - Math.max(0, (viewport.height - box.height) / 2)))
+      if (Math.abs(main.scrollTop - target) > 25) {
+        main.dispatchEvent(new WheelEvent('wheel', { deltaY: -120, bubbles: true }))
+        main.scrollTop = target
+        return false
+      }
+      return ${index === 3 ? "block.textContent.includes('Mermaid Error:')" : "block.querySelector('[role=img] svg')?.getBoundingClientRect().width > 0"}
+    })()`)
+    for (let index = 0; index < 4; index++) revealDiagram(index)
     const result = browser.evaluate(`(() => {
       const blocks = [...document.querySelectorAll('[data-streamdown="mermaid-block"]')]
       const diagrams = [...document.querySelectorAll('[data-streamdown="mermaid"] [role="img"] > svg')]
@@ -663,10 +666,30 @@ describe('Mermaid conversation previews', () => {
     expect(result.after).toBe(true)
     expect(result.copies).toBe(4)
 
-    for (const theme of ['dark', 'light']) {
-      browser.evaluate(`document.documentElement.classList.toggle('light', ${theme === 'light'})`)
+    let previousFill: string | undefined
+    for (const theme of ['dark', 'light', 'dark']) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (browser.evaluate(`document.querySelector('[data-slot="theme-toggle"]').getAttribute('data-theme-pref')`) === theme) break
+        browser.click('[data-slot="theme-toggle"]')
+      }
       revealDiagram(0)
-      expect(browser.evaluate(`getComputedStyle(document.querySelector('[data-streamdown="mermaid"]')).backgroundColor`)).toBe('rgb(255, 255, 255)')
+      browser.waitForFunction(`(() => {
+        const node = document.querySelector('[data-streamdown="mermaid"] [role="img"] svg .node rect')
+        return node && getComputedStyle(node).fill !== ${JSON.stringify(previousFill ?? null)}
+      })()`)
+      const palette = browser.evaluate(`(() => {
+        const pane = document.querySelector('[data-streamdown="mermaid"]')
+        return {
+          background: getComputedStyle(pane).backgroundColor,
+          pageBackground: getComputedStyle(document.body).backgroundColor,
+          nodeFill: getComputedStyle(pane.querySelector('[role="img"] svg .node rect')).fill,
+          light: document.documentElement.classList.contains('light'),
+        }
+      })()`) as { background: string; pageBackground: string; nodeFill: string; light: boolean }
+      expect(palette.background).toBe(palette.pageBackground)
+      expect(palette.light).toBe(theme === 'light')
+      previousFill = palette.nodeFill
+      revealDiagram(0)
       expect(browser.evaluate(`(() => {
         const pane = document.querySelector('[data-streamdown="mermaid"]')
         return pane.querySelector('[role="img"] > svg').getBoundingClientRect().width / pane.getBoundingClientRect().width

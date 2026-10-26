@@ -1,21 +1,27 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ThemeProvider } from '@/components/theme-provider'
+import { ThemeToggle } from '@/components/theme-toggle'
+
 import { Markdown } from './markdown'
 
-const { renderDiagram } = vi.hoisted(() => ({
-  renderDiagram: vi.fn(async (id: string, source: string) => {
+const { renderDiagram, getMermaid } = vi.hoisted(() => {
+  const renderDiagram = vi.fn(async (id: string, source: string) => {
     if (source.includes('invalid diagram')) throw new Error('Invalid Mermaid syntax')
     return { svg: `<svg id="${id}"><text>Rendered diagram</text></svg>` }
-  }),
-}))
+  })
+  return { renderDiagram, getMermaid: vi.fn(() => ({ render: renderDiagram })) }
+})
 
 // SVG layout needs a browser; leave Streamdown real and stub only Mermaid's layout engine.
 vi.mock('@streamdown/mermaid', () => ({
-  mermaid: { name: 'mermaid', type: 'diagram', language: 'mermaid', getMermaid: () => ({ render: renderDiagram }) },
+  mermaid: { name: 'mermaid', type: 'diagram', language: 'mermaid', getMermaid },
 }))
 
 beforeEach(() => {
+  localStorage.clear()
+  document.documentElement.classList.remove('light')
   vi.stubGlobal('IntersectionObserver', class {
     constructor(private callback: (entries: { isIntersecting: boolean }[]) => void) {}
     observe() { queueMicrotask(() => this.callback([{ isIntersecting: true }])) }
@@ -28,12 +34,32 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   renderDiagram.mockClear()
+  getMermaid.mockClear()
   vi.unstubAllGlobals()
 })
 
 const fence = (source: string) => `\`\`\`mermaid\n${source}\n\`\`\``
 
 describe('Markdown Mermaid previews', () => {
+  it('updates diagrams when the cockpit theme changes, including system mode', async () => {
+    localStorage.setItem('cez-theme', 'light')
+    render(
+      <ThemeProvider>
+        <ThemeToggle />
+        <Markdown>{fence('flowchart LR\n  A --> B')}</Markdown>
+      </ThemeProvider>,
+    )
+    await waitFor(() => expect(getMermaid).toHaveBeenLastCalledWith({ theme: 'default' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Theme: light. Switch to dark.' }))
+    await waitFor(() => expect(getMermaid).toHaveBeenLastCalledWith({ theme: 'dark' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Theme: dark. Switch to system.' }))
+    expect(getMermaid).toHaveBeenLastCalledWith({ theme: 'dark' })
+    fireEvent.click(screen.getByRole('button', { name: 'Theme: system. Switch to light.' }))
+    await waitFor(() => expect(getMermaid).toHaveBeenLastCalledWith({ theme: 'default' }))
+  })
+
   it('renders Mermaid with source copying and keeps normal code fences', async () => {
     const flow = 'flowchart LR\n  A[Client] --> B[Gateway]'
     const { container } = render(<Markdown>{`${fence(flow)}\n\n\`\`\`text\nplain code\n\`\`\``}</Markdown>)
