@@ -646,3 +646,13 @@
 .thread-markdown.markdown-document [data-streamdown='code-block'] pre {
   font-size: 13px;
 }
+
+/* Mermaid's default palette needs a light canvas in either cockpit theme. */
+.thread-markdown [data-streamdown='mermaid'] {
+  background: var(--color-white);
+  border-radius: var(--radius-md);
+}
+
+.thread-markdown [data-streamdown='mermaid'] [role='img'] {
+  width: 100%;
+}
