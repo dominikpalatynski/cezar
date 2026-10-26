@@ -40,6 +40,7 @@ const MERMAID_RUN = {
   titleSummary: 'Mermaid diagram previews',
 }
 const MERMAID_FLOW = `flowchart LR
+    accTitle: Gateway architecture
     C[Klient / SDK] --> L[HTTPS / ALB]
     L --> P[ai-gateway :8200]
     P --> D[(Postgres: klucze API)]
@@ -51,8 +52,8 @@ const MERMAID_FLOW = `flowchart LR
 const MERMAID_REPLY = [
   '## Architecture preview',
   '```mermaid\n' + MERMAID_FLOW + '\n```',
-  '```mermaid\nsequenceDiagram\n  Client->>Gateway: Request\n  Gateway-->>Client: Response\n```',
-  '```mermaid\n%%{init: {"securityLevel": "loose"}}%%\nflowchart LR\n  X["<img src=x onerror=window.__mermaidInjected=true>"] --> Y[Safe]\n  click Y "javascript:window.__mermaidInjected=true"\n```',
+  '```mermaid\nsequenceDiagram\n  accTitle: Request sequence\n  Client->>Gateway: Request\n  Gateway-->>Client: Response\n```',
+  '```mermaid\n%%{init: {"securityLevel": "loose"}}%%\nflowchart LR\n  X["<img src=x onerror=window.__mermaidInjected=true>"] --> Y[Safe]\n  click Y "javascript:window.__mermaidInjected=true"\n  click X "https://example.com/diagram-link"\n  Z@{ img: "https://example.com/diagram-image.png", label: "Remote image" }\n```',
   '```mermaid\ninvalid diagram\n```',
   'After the diagrams.',
 ].join('\n\n')
@@ -648,19 +649,21 @@ describe('Mermaid conversation previews', () => {
       const blocks = [...document.querySelectorAll('[data-streamdown="mermaid-block"]')]
       const diagrams = [...document.querySelectorAll('[data-streamdown="mermaid"] [role="img"] > svg')]
       return {
+        pele: diagrams.every(svg => svg.classList.contains('pele')),
         flow: diagrams[0].textContent,
         sequence: diagrams[1].textContent,
-        uniqueIds: new Set(diagrams.map(svg => svg.id)).size,
-        unsafe: blocks[2].querySelectorAll('a[href], a[*|href], script, [onerror], [onclick]').length + Number(Boolean(window.__mermaidInjected)),
+        uniqueIds: (() => { const ids = diagrams.flatMap(svg => [...svg.querySelectorAll('[id]')].map(el => el.id)); return ids.length > 0 && new Set(ids).size === ids.length })(),
+        unsafe: blocks[2].querySelectorAll('a[href], a[*|href], image, foreignObject, script, [onerror], [onclick]').length + Number(Boolean(window.__mermaidInjected)),
         source: blocks[3].querySelector('pre').textContent,
         after: document.body.textContent.includes('After the diagrams.'),
         copies: document.querySelectorAll('[data-streamdown="mermaid-block-actions"] [data-streamdown="code-block-copy-button"]').length,
       }
-    })()`) as { flow: string; sequence: string; uniqueIds: number; unsafe: number; source: string; after: boolean; copies: number }
+    })()`) as { pele: boolean; flow: string; sequence: string; uniqueIds: boolean; unsafe: number; source: string; after: boolean; copies: number }
+    expect(result.pele).toBe(true)
     expect(result.flow).toContain('Klient / SDK')
     expect(result.flow).toContain('Postgres: klucze API')
     expect(result.sequence).toContain('Request')
-    expect(result.uniqueIds).toBe(3)
+    expect(result.uniqueIds).toBe(true)
     expect(result.unsafe).toBe(0)
     expect(result.source).toContain('invalid diagram')
     expect(result.after).toBe(true)
@@ -674,7 +677,7 @@ describe('Mermaid conversation previews', () => {
       }
       revealDiagram(0)
       browser.waitForFunction(`(() => {
-        const node = document.querySelector('[data-streamdown="mermaid"] [role="img"] svg .node rect')
+        const node = document.querySelector('[data-streamdown="mermaid"] [role="img"] svg .pele-node rect')
         return node && getComputedStyle(node).fill !== ${JSON.stringify(previousFill ?? null)}
       })()`)
       const palette = browser.evaluate(`(() => {
@@ -682,7 +685,7 @@ describe('Mermaid conversation previews', () => {
         return {
           background: getComputedStyle(pane).backgroundColor,
           pageBackground: getComputedStyle(document.body).backgroundColor,
-          nodeFill: getComputedStyle(pane.querySelector('[role="img"] svg .node rect')).fill,
+          nodeFill: getComputedStyle(pane.querySelector('[role="img"] svg .pele-node rect')).fill,
           light: document.documentElement.classList.contains('light'),
         }
       })()`) as { background: string; pageBackground: string; nodeFill: string; light: boolean }

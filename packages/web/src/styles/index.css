@@ -648,6 +648,14 @@
 }
 
 .thread-markdown [data-streamdown='mermaid'] {
+  --pele-bg: var(--background);
+  --pele-fg: var(--foreground);
+  --pele-muted: var(--muted-foreground);
+  --pele-line: var(--muted-foreground);
+  --pele-surface: var(--card);
+  --pele-surface-alt: var(--muted);
+  --pele-border: var(--border);
+  --pele-accent: var(--primary);
   background: var(--background);
   border-radius: var(--radius-md);
 }

@@ -19,7 +19,7 @@ type ThemeContextValue = {
   setTheme: (theme: Theme) => void
 }
 
-export const ThemeContext = React.createContext<ThemeContextValue | null>(null)
+const ThemeContext = React.createContext<ThemeContextValue | null>(null)
 
 /** Owns the theme preference: seeds from `localStorage` (the same value the pre-paint script in
  *  index.html already stamped, so mounting never repaints), tracks the OS preference live, and

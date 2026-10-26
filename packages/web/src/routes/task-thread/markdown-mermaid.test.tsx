@@ -6,18 +6,15 @@ import { ThemeToggle } from '@/components/theme-toggle'
 
 import { Markdown } from './markdown'
 
-const { renderDiagram, getMermaid } = vi.hoisted(() => {
-  const renderDiagram = vi.fn(async (id: string, source: string) => {
+const { renderDiagram } = vi.hoisted(() => ({
+  renderDiagram: vi.fn(async (source: string) => {
     if (source.includes('invalid diagram')) throw new Error('Invalid Mermaid syntax')
-    return { svg: `<svg id="${id}"><text>Rendered diagram</text></svg>` }
-  })
-  return { renderDiagram, getMermaid: vi.fn(() => ({ render: renderDiagram })) }
-})
-
-// SVG layout needs a browser; leave Streamdown real and stub only Mermaid's layout engine.
-vi.mock('@streamdown/mermaid', () => ({
-  mermaid: { name: 'mermaid', type: 'diagram', language: 'mermaid', getMermaid },
+    return { svg: '<svg class="pele"><text>Rendered diagram</text></svg>' }
+  }),
 }))
+
+// Leave Streamdown real and stub only Pele's SVG renderer.
+vi.mock('pele/lazy', () => ({ renderAsync: renderDiagram }))
 
 beforeEach(() => {
   localStorage.clear()
@@ -34,14 +31,13 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   renderDiagram.mockClear()
-  getMermaid.mockClear()
   vi.unstubAllGlobals()
 })
 
 const fence = (source: string) => `\`\`\`mermaid\n${source}\n\`\`\``
 
 describe('Markdown Mermaid previews', () => {
-  it('updates diagrams when the cockpit theme changes, including system mode', async () => {
+  it('keeps the SVG when the cockpit theme changes; CSS supplies its palette', async () => {
     localStorage.setItem('cez-theme', 'light')
     render(
       <ThemeProvider>
@@ -49,15 +45,15 @@ describe('Markdown Mermaid previews', () => {
         <Markdown>{fence('flowchart LR\n  A --> B')}</Markdown>
       </ThemeProvider>,
     )
-    await waitFor(() => expect(getMermaid).toHaveBeenLastCalledWith({ theme: 'default' }))
+    await screen.findByRole('img', { name: 'Mermaid chart' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Theme: light. Switch to dark.' }))
-    await waitFor(() => expect(getMermaid).toHaveBeenLastCalledWith({ theme: 'dark' }))
+    expect(renderDiagram).toHaveBeenCalledTimes(1)
 
     fireEvent.click(screen.getByRole('button', { name: 'Theme: dark. Switch to system.' }))
-    expect(getMermaid).toHaveBeenLastCalledWith({ theme: 'dark' })
+    expect(renderDiagram).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByRole('button', { name: 'Theme: system. Switch to light.' }))
-    await waitFor(() => expect(getMermaid).toHaveBeenLastCalledWith({ theme: 'default' }))
+    expect(renderDiagram).toHaveBeenCalledTimes(1)
   })
 
   it('renders Mermaid with source copying and keeps normal code fences', async () => {
@@ -65,7 +61,8 @@ describe('Markdown Mermaid previews', () => {
     const { container } = render(<Markdown>{`${fence(flow)}\n\n\`\`\`text\nplain code\n\`\`\``}</Markdown>)
 
     await waitFor(() => expect(renderDiagram).toHaveBeenCalledTimes(1))
-    expect(renderDiagram.mock.calls.map(([, source]) => source.trim())).toEqual([flow])
+    expect(renderDiagram.mock.calls.map(([source]) => source.trim())).toEqual([flow])
+    expect(renderDiagram).toHaveBeenCalledWith(expect.any(String), { idPrefix: expect.any(String), links: false, images: false })
     expect(container.querySelectorAll('[data-streamdown="mermaid-block-actions"] [data-streamdown="code-block-copy-button"]')).toHaveLength(1)
     expect(container.querySelector('[data-language="text"]')?.textContent).toContain('plain code')
     expect(screen.queryByTitle('View fullscreen')).toBeNull()
@@ -88,7 +85,7 @@ describe('Markdown Mermaid previews', () => {
     const { rerender } = render(<Markdown>{'```mermaid\nflowchart LR\n  A --> B'}</Markdown>)
     await screen.findByRole('img', { name: 'Mermaid chart' })
     rerender(<Markdown>{fence('flowchart LR\n  A --> B\n  B --> C')}</Markdown>)
-    await waitFor(() => expect(renderDiagram.mock.calls.at(-1)?.[1]).toContain('B --> C'))
+    await waitFor(() => expect(renderDiagram.mock.calls.at(-1)?.[0]).toContain('B --> C'))
   })
 
   it('keeps compact inline previews text-only', () => {

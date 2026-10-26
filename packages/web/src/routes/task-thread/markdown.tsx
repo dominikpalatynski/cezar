@@ -1,4 +1,4 @@
-import { memo, useContext, useState, type ComponentProps } from 'react'
+import { memo, useState, type ComponentProps } from 'react'
 import {
   Streamdown,
   defaultRemarkPlugins,
@@ -9,7 +9,6 @@ import {
   type UrlTransform,
 } from 'streamdown'
 
-import { ThemeContext } from '@/components/theme-provider'
 import { SYN_THEME, highlight, highlightSync, supportedLanguages } from '@/lib/highlighter'
 
 import { LinkSafetyDialog } from './link-safety-dialog'
@@ -44,24 +43,19 @@ const shikiPlugin: CodeHighlighterPlugin = {
   },
 }
 
-// The standard plugin imports Mermaid eagerly; load it only when a diagram actually renders.
+// Keep Streamdown's controls and error fallback; load Pele only for visible diagrams.
 const mermaidPlugin: DiagramPlugin = {
   name: 'mermaid',
   type: 'diagram',
   language: 'mermaid',
-  getMermaid: (config) => ({
-    initialize: (nextConfig) => { config = nextConfig },
+  getMermaid: () => ({
+    initialize: () => {},
     render: async (id, source) => {
-      const { mermaid } = await import('@streamdown/mermaid')
-      return mermaid.getMermaid(config).render(id, source)
+      const { renderAsync } = await import('pele/lazy')
+      return renderAsync(source, { idPrefix: id, links: false, images: false })
     },
   }),
 }
-
-const MERMAID_OPTIONS = {
-  dark: { config: { theme: 'dark' } },
-  light: { config: { theme: 'default' } },
-} as const
 
 interface MdastNode {
   type: string
@@ -271,8 +265,6 @@ export const Markdown = memo(function Markdown({
   variant?: 'chat' | 'document'
   urlTransform?: UrlTransform
 }) {
-  const theme = useContext(ThemeContext)?.resolvedTheme ?? 'dark'
-
   return (
     <Streamdown
       className={
@@ -283,7 +275,6 @@ export const Markdown = memo(function Markdown({
             : 'thread-markdown'
       }
       plugins={{ code: shikiPlugin, ...(inline ? {} : { mermaid: mermaidPlugin }) }}
-      mermaid={MERMAID_OPTIONS[theme]}
       shikiTheme={[SYN_THEME, SYN_THEME]}
       remarkPlugins={breaks ? HARD_BREAKS : undefined}
       rehypePlugins={urlTransform ? undefined : TRANSCRIPT_REHYPE_PLUGINS}
